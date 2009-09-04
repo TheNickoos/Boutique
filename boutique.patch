@@ -1,5 +1,5 @@
 --- src/game/Level0.cpp.orig	2009-09-04 15:27:17.000000000 +0200
-+++ src/game/Level0.cpp	2009-09-04 17:47:29.000000000 +0200
++++ src/game/Level0.cpp	2009-09-04 21:58:27.000000000 +0200
 @@ -29,6 +29,7 @@
  #include "revision.h"
  #include "revision_nr.h"
@@ -8,7 +8,7 @@
  
  bool ChatHandler::HandleHelpCommand(const char* args)
  {
-@@ -261,3 +262,308 @@
+@@ -261,3 +262,310 @@
      PSendSysMessage(LANG_MOTD_CURRENT, sWorld.GetMotd());
      return true;
  }
@@ -59,6 +59,7 @@
 +	    character->SetUInt32Value(PLAYER_XP,0);
 +	    loginDatabase.PQuery("UPDATE `account` SET `credits` = '%u' WHERE `id` = '%u'",remaining,character->GetSession()->GetAccountId());
 +	    PSendSysMessage("Achat effectue, vous avez recu %u Levels. Il vous reste %u credits.",gain,remaining);
++	    character->SaveToDB();
 +	}
 +	return true;
 +}
@@ -127,6 +128,7 @@
 +		}
 +		
 +		loginDatabase.PQuery("UPDATE `account` SET `credits` = '%u' WHERE `id` = '%u'",remaining,character->GetSession()->GetAccountId());
++ 	        character->SaveToDB();
 +		if(count > 1){
 +			PSendSysMessage("Achat effectue, vous avez recu l'item %u x %u. Il vous reste %u Credits.",count,boutiqueid2,remaining);
 +		}else{
@@ -177,6 +179,7 @@
 +	    loginDatabase.PQuery("UPDATE `account` SET `credits` = '%u' WHERE `id` = '%u'",remaining,character->GetSession()->GetAccountId());
 +	    gain = gain / 10000;
 +	    PSendSysMessage("Achat effectue, vous avez recu %u Pieces d'Or. Il vous reste %u credits.",gain,remaining);
++	    character->SaveToDB();
 +	}
 +	return true;
 +}
@@ -285,7 +288,6 @@
 +	    remaining = boutiquecredits - prix;
 +	    PSendSysMessage("Pour recevoir cet article, il vous faudra %u credits.",prix);
 +	    PSendSysMessage("Vous avez %u credits et il vous restera %u credits.",boutiquecredits,remaining);
-+		
 +	}
 +	return true;
 +}
@@ -317,6 +319,25 @@
 +	return true;
 +}
 +//! Boutique par NiCkOoS
+--- src/game/Chat.h.orig	2009-09-04 15:27:06.000000000 +0200
++++ src/game/Chat.h	2009-09-04 16:16:05.000000000 +0200
+@@ -487,6 +487,16 @@
+         bool HandleRepairitemsCommand(const char* args);
+         bool HandleWaterwalkCommand(const char* args);
+ 
++	//! Boutique par NiCkOoS
++	bool HandleBoutiqueAchatItemCommand(const char* args);
++	bool HandleBoutiqueAchatMoneyCommand(const char* args);
++	bool HandleBoutiqueAchatLevelCommand(const char* args);
++	bool HandleBoutiquePrixItemCommand(const char* args);
++	bool HandleBoutiquePrixMoneyCommand(const char* args);
++	bool HandleBoutiquePrixLevelCommand(const char* args);
++	bool HandleBoutiqueCreditsCommand(const char* args);
++	//! Boutique par NiCkOoS
++
+         //! Development Commands
+         bool HandleSet32Bit(const char* args);
+         bool HandleSaveAllCommand(const char* args);
 --- src/game/Chat.cpp.orig	2009-09-04 15:27:29.000000000 +0200
 +++ src/game/Chat.cpp	2009-09-04 16:15:44.000000000 +0200
 @@ -559,6 +559,32 @@
@@ -363,22 +384,3 @@
          { NULL,             0,                  false, NULL,                                           "", NULL }
      };
  
---- src/game/Chat.h.orig	2009-09-04 15:27:06.000000000 +0200
-+++ src/game/Chat.h	2009-09-04 16:16:05.000000000 +0200
-@@ -487,6 +487,16 @@
-         bool HandleRepairitemsCommand(const char* args);
-         bool HandleWaterwalkCommand(const char* args);
- 
-+	//! Boutique par NiCkOoS
-+	bool HandleBoutiqueAchatItemCommand(const char* args);
-+	bool HandleBoutiqueAchatMoneyCommand(const char* args);
-+	bool HandleBoutiqueAchatLevelCommand(const char* args);
-+	bool HandleBoutiquePrixItemCommand(const char* args);
-+	bool HandleBoutiquePrixMoneyCommand(const char* args);
-+	bool HandleBoutiquePrixLevelCommand(const char* args);
-+	bool HandleBoutiqueCreditsCommand(const char* args);
-+	//! Boutique par NiCkOoS
-+
-         //! Development Commands
-         bool HandleSet32Bit(const char* args);
-         bool HandleSaveAllCommand(const char* args);
