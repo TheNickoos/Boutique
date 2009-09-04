@@ -1,0 +1,384 @@
+--- src/game/Level0.cpp.orig	2009-09-04 15:27:17.000000000 +0200
++++ src/game/Level0.cpp	2009-09-04 17:47:29.000000000 +0200
+@@ -29,6 +29,7 @@
+ #include "revision.h"
+ #include "revision_nr.h"
+ #include "Util.h"
++#include "ObjectMgr.h"
+ 
+ bool ChatHandler::HandleHelpCommand(const char* args)
+ {
+@@ -261,3 +262,308 @@
+     PSendSysMessage(LANG_MOTD_CURRENT, sWorld.GetMotd());
+     return true;
+ }
++
++//! Boutique par NiCkOoS
++bool ChatHandler::HandleBoutiqueAchatLevelCommand(const char* args)
++{
++    Player* character = m_session->GetPlayer();
++    uint32 boutiquecredits; 
++    int32 remaining;  
++    uint32 gain;		
++    uint32 prix;
++    std::string name;
++    if(character){   
++	    QueryResult* result = loginDatabase.PQuery("SELECT `credits` FROM `account` WHERE `id` = '%u'",character->GetSession()->GetAccountId());	
++	    if(!result)
++	       return true;
++ 
++	    Field* fields = result->Fetch();
++	    if(!fields)
++	       return true;
++
++	    boutiquecredits = fields[0].GetUInt32();
++	    if(boutiquecredits <= 0){	
++	  	PSendSysMessage("Vous n'avez pas de Credits, veuillez recharger votre compte.");
++		return true;
++	    }
++		
++	    name = character->GetName();
++	    int32 oldlevel = character->getLevel();
++	    QueryResult* result2 = WorldDatabase.PQuery("SELECT `gain`,`prix` FROM `boutique_level` WHERE `level_max` > '%u' AND level_min <= '%u'",oldlevel,oldlevel);
++		
++	    if(!result2)
++	        return true;
++	 
++	    Field* fields2 = result2->Fetch();
++	    gain = fields2[0].GetUInt32();
++	    prix = fields2[1].GetUInt32();
++	    remaining = boutiquecredits - prix;		
++	    if(remaining < 0){
++	        PSendSysMessage("Vous n'avez pas assez de credits, cet objet coute %u credits.",prix);
++	        return true;
++            }
++		
++	    int32 newlevel = oldlevel + gain;
++	    character->GiveLevel(newlevel);
++	    character->InitTalentForLevel();
++	    character->SetUInt32Value(PLAYER_XP,0);
++	    loginDatabase.PQuery("UPDATE `account` SET `credits` = '%u' WHERE `id` = '%u'",remaining,character->GetSession()->GetAccountId());
++	    PSendSysMessage("Achat effectue, vous avez recu %u Levels. Il vous reste %u credits.",gain,remaining);
++	}
++	return true;
++}
++
++bool ChatHandler::HandleBoutiqueAchatItemCommand(const char* args)
++{
++    char* boutiqueid = strtok ((char*)args, " ");
++	if(!boutiqueid)
++		return true;
++
++  	int32 boutiqueid2 = (int32)atoi(boutiqueid);
++	Player* character = m_session->GetPlayer();
++        uint32 boutiquecredits; 
++        int32 remaining;  
++	uint32 prix;
++	uint32 count;
++	uint32 itemid;
++	std::string name;
++	if(character){ 	
++		QueryResult* result = loginDatabase.PQuery("SELECT `credits` FROM `account` WHERE `id` = '%u'",character->GetSession()->GetAccountId());	
++		if(!result)
++			return true;
++	 
++		Field* fields = result->Fetch();
++		if(!fields)
++	     		return true;
++
++		boutiquecredits = fields[0].GetUInt32();
++		if(boutiquecredits <= 0){	
++			PSendSysMessage("Vous n'avez pas de Credits, veuillez recharger votre compte.");
++			return true;
++		}
++	
++		name = character->GetName();
++		QueryResult* result2 = WorldDatabase.PQuery("SELECT `itemid`,`count`,`prix` FROM `boutique_item` WHERE `itemid` LIKE '%u'",boutiqueid2);
++		if(!result2){
++			PSendSysMessage("Vous n'avez pas chosi un objet valide : %u .",boutiqueid2);
++			return true;
++		}
++ 
++		Field* fields2 = result2->Fetch();
++		itemid = fields2[0].GetUInt32();
++		count = fields2[1].GetUInt32();
++		prix = fields2[2].GetUInt32();
++		remaining = boutiquecredits - prix;		
++		if(remaining < 0){
++	        	PSendSysMessage("Vous n'avez pas assez de credits, cet objet coute %u credits.",prix);
++		        return true;
++        	}
++		
++		ItemPosCountVec dest;
++		ItemPrototype const *pProto = sItemStorage.LookupEntry<ItemPrototype >(itemid);
++		if(!pProto){
++			PSendSysMessage("L'item %u est introuvable dans les donnees.", boutiqueid2);
++			return true;
++		}
++
++		uint8 msg = character->CanStoreNewItem(NULL_BAG, NULL_SLOT, dest, itemid, count, false);
++		if(msg == EQUIP_ERR_OK){
++			Item* item = character->StoreNewItem(dest, itemid, count, true);
++			character->SendNewItem(item,count,true,false);
++		}else{
++			PSendSysMessage("Impossible d'ajouter l'article %s x %u", pProto->Name1, count);
++			PSendSysMessage("Vos sacs semblent remplis ou l'objet est unique.",boutiqueid2,remaining);
++			return true;
++		}
++		
++		loginDatabase.PQuery("UPDATE `account` SET `credits` = '%u' WHERE `id` = '%u'",remaining,character->GetSession()->GetAccountId());
++		if(count > 1){
++			PSendSysMessage("Achat effectue, vous avez recu l'item %u x %u. Il vous reste %u Credits.",count,boutiqueid2,remaining);
++		}else{
++			PSendSysMessage("Achat effectue, vous avez recu l'item %u. Il vous reste %u Credits.",boutiqueid2,remaining);
++		}
++	}
++	return true;
++}
++
++bool ChatHandler::HandleBoutiqueAchatMoneyCommand(const char* args)
++{
++	Player* character = m_session->GetPlayer();
++	uint32 boutiquecredits; 
++	uint32 gain; 
++	int32 remaining;  
++	uint32 prix;
++	std::string name;
++	if(character){ 	
++	    QueryResult* result = loginDatabase.PQuery("SELECT `credits` FROM `account` WHERE `id` = '%u'",character->GetSession()->GetAccountId());	
++	    if(!result)
++	       return true;
++	 
++	    Field* fields = result->Fetch();
++	    if(!fields)
++	       return true;
++
++	    boutiquecredits = fields[0].GetUInt32();
++	    if(boutiquecredits <= 0){	
++		PSendSysMessage("Vous n'avez pas de credits, veuillez recharger votre compte.");
++		return true;
++	    }
++	    name = character->GetName();
++	    int32 oldlevel = character->getLevel();
++	    QueryResult* result2 = WorldDatabase.PQuery("SELECT `gain`,`prix` FROM `boutique_money` WHERE `level_max` >= '%u' AND level_min <= '%u'",oldlevel,oldlevel);
++	    if(!result2)
++	 	return true;
++ 
++	    Field* fields2 = result2->Fetch();
++	    gain = fields2[0].GetUInt32();
++	    prix = fields2[1].GetUInt32();
++	    remaining = boutiquecredits - prix;		
++	    if(remaining < 0){
++	        PSendSysMessage("Vous n'avez pas assez de credits, cet objet coute %u credits.",prix);
++	        return true;
++            }
++
++   	    character->ModifyMoney( gain );
++	    loginDatabase.PQuery("UPDATE `account` SET `credits` = '%u' WHERE `id` = '%u'",remaining,character->GetSession()->GetAccountId());
++	    gain = gain / 10000;
++	    PSendSysMessage("Achat effectue, vous avez recu %u Pieces d'Or. Il vous reste %u credits.",gain,remaining);
++	}
++	return true;
++}
++
++bool ChatHandler::HandleBoutiquePrixLevelCommand(const char* args)
++{
++    Player* character = m_session->GetPlayer();
++    uint32 boutiquecredits; 
++    int32 remaining;  
++    uint32 gain;  
++    uint32 prix;
++    std::string name;
++    if(character){   
++	    QueryResult* result = loginDatabase.PQuery("SELECT `credits` FROM `account` WHERE `id` = '%u'",character->GetSession()->GetAccountId());	
++	    if(!result)
++	       return true;
++	 
++	    Field* fields = result->Fetch();
++	    if(!fields)
++	       return true;
++
++	    boutiquecredits = fields[0].GetUInt32();
++	    name = character->GetName();
++	    int32 oldlevel = character->getLevel();
++	    QueryResult* result2 = WorldDatabase.PQuery("SELECT `gain`,`prix` FROM `boutique_level` WHERE `level_max` > '%u' AND level_min <= '%u'",oldlevel,oldlevel);
++	    if(!result2)
++	    	return true;
++	 
++	    Field* fields2 = result2->Fetch();
++	    gain = fields2[0].GetUInt32();
++	    prix = fields2[1].GetUInt32();
++	    remaining = boutiquecredits - prix;
++	    PSendSysMessage("Pour recevoir %u Levels, il vous faudra %u credits.",gain,prix);
++	    PSendSysMessage("Vous avez %u credits et il vous restera %u credits.",boutiquecredits,remaining);
++    }
++    return true;
++}
++
++bool ChatHandler::HandleBoutiquePrixMoneyCommand(const char* args)
++{
++    Player* character = m_session->GetPlayer();
++    uint32 boutiquecredits; 
++    int32 remaining;  
++    uint32 gain;  
++    uint32 prix;
++    std::string name;
++    if(character){   
++	    QueryResult* result = loginDatabase.PQuery("SELECT `credits` FROM `account` WHERE `id` = '%u'",character->GetSession()->GetAccountId());	
++	    if(!result)
++	       return true;
++	 
++	    Field* fields = result->Fetch();
++	    if(!fields)
++	       return true;
++
++	    boutiquecredits = fields[0].GetUInt32();
++	    name = character->GetName();
++	    int32 oldlevel = character->getLevel();
++	    QueryResult* result2 = WorldDatabase.PQuery("SELECT `gain`,`prix` FROM `boutique_money` WHERE `level_max` >= '%u' AND level_min <= '%u'",oldlevel,oldlevel);
++	    if(!result2)
++	    	return true;
++	 
++	    Field* fields2 = result2->Fetch();
++	    gain = fields2[0].GetUInt32();
++	    prix = fields2[1].GetUInt32();
++	    remaining = boutiquecredits - prix;
++	    PSendSysMessage("Pour recevoir %u pieces d'or, il vous faudra %u credits.",gain,prix);
++	    PSendSysMessage("Vous avez %u credits et il vous restera %u credits.",boutiquecredits,remaining);
++    }
++    return true;
++}
++
++bool ChatHandler::HandleBoutiquePrixItemCommand(const char* args)
++{
++    char* boutiqueid = strtok ((char*)args, " ");
++    if(!boutiqueid)
++	return true;
++
++    int32 boutiqueid2 = (int32)atoi(boutiqueid);
++    Player* character = m_session->GetPlayer();
++    uint32 boutiquecredits; 
++    int32 remaining;  
++    uint32 prix;
++    std::string name;
++    if(character)
++    {   
++	    QueryResult* result = loginDatabase.PQuery("SELECT `credits` FROM `account` WHERE `id` = '%u'",character->GetSession()->GetAccountId());	
++	    if(!result)
++	       return true;
++	 
++	    Field* fields = result->Fetch();
++	    if(!fields)
++	       return true;
++
++	    boutiquecredits = fields[0].GetUInt32();
++   	    name = character->GetName();
++	    QueryResult* result2 = WorldDatabase.PQuery("SELECT `prix` FROM `boutique_item` WHERE `entry` = '%u'",boutiqueid2);
++	    if(!result2)
++	    {
++		PSendSysMessage("Vous n'avez pas choisi un article valide : %u.",boutiqueid2);
++	       	return true;
++	    }
++
++	    Field* fields2 = result2->Fetch();
++	    prix = fields2[0].GetUInt32();
++	    remaining = boutiquecredits - prix;
++	    PSendSysMessage("Pour recevoir cet article, il vous faudra %u credits.",prix);
++	    PSendSysMessage("Vous avez %u credits et il vous restera %u credits.",boutiquecredits,remaining);
++		
++	}
++	return true;
++}
++
++bool ChatHandler::HandleBoutiqueCreditsCommand(const char* args)
++{
++	Player* character = m_session->GetPlayer();
++	uint32 boutiquecredits;
++	if(character)
++	{   
++	    QueryResult* result = loginDatabase.PQuery("SELECT `credits` FROM `account` WHERE `id` = '%u'",character->GetSession()->GetAccountId());	
++	    if(!result)
++	       return true;
++	 
++	    Field* fields = result->Fetch();
++	    if(!fields)
++	       return true;
++
++	    boutiquecredits = fields[0].GetUInt32();
++	    if(boutiquecredits > 0){
++		PSendSysMessage("Vous possedez %u credits ! Allez vite les depenser !",boutiquecredits);
++	    }else if(boutiquecredits == 0){
++		PSendSysMessage("Vous n'avez aucun credit ! Allez vite en acheter !");
++	    }else{
++		loginDatabase.PQuery("UPDATE `account` SET `credits` = 0 WHERE `id` = '%u'",character->GetSession()->GetAccountId());
++		PSendSysMessage("Vous n'avez aucun credit ! Allez vite en acheter !");
++	    }
++	}
++	return true;
++}
++//! Boutique par NiCkOoS
+--- src/game/Chat.cpp.orig	2009-09-04 15:27:29.000000000 +0200
++++ src/game/Chat.cpp	2009-09-04 16:15:44.000000000 +0200
+@@ -559,6 +559,32 @@
+         { NULL,             0,                  false, NULL,                                           "", NULL }
+     };
+ 
++    //! Boutique par NiCkOoS
++    static ChatCommand BoutiqueAchatCommandTable[] =
++    {
++	{ "item",	    SEC_PLAYER,		false, &ChatHandler::HandleBoutiqueAchatItemCommand,    "", NULL },
++	{ "money",	    SEC_PLAYER,		false, &ChatHandler::HandleBoutiqueAchatMoneyCommand,   "", NULL },
++	{ "level",	    SEC_PLAYER,		false, &ChatHandler::HandleBoutiqueAchatLevelCommand,   "", NULL },
++	{ NULL,             0,                  false, NULL,                                            "", NULL }
++    };
++	
++    static ChatCommand BoutiquePrixCommandTable[] =
++    {
++	{ "item",	    SEC_PLAYER,		false, &ChatHandler::HandleBoutiquePrixItemCommand,     "", NULL },
++	{ "money",	    SEC_PLAYER,		false, &ChatHandler::HandleBoutiquePrixMoneyCommand,    "", NULL },
++	{ "level",	    SEC_PLAYER,		false, &ChatHandler::HandleBoutiquePrixLevelCommand,    "", NULL },
++	{ NULL,             0,                  false, NULL,                                            "", NULL }
++    };
++	
++    static ChatCommand BoutiqueCommandTable[] =
++    {
++	{ "achat",	    SEC_PLAYER,		true,  NULL,						"", BoutiqueAchatCommandTable },
++	{ "prix",	    SEC_PLAYER,		false, NULL,   						"", BoutiquePrixCommandTable },
++	{ "credit",	    SEC_PLAYER,		false, &ChatHandler::HandleBoutiqueCreditsCommand,     	"", NULL },
++	{ NULL,             0,                  false, NULL,                                            "", NULL }
++    };
++    //! Boutique par NiCkOoS
++
+     static ChatCommand commandTable[] =
+     {
+         { "account",        SEC_PLAYER,         true,  NULL,                                           "", accountCommandTable  },
+@@ -644,6 +670,10 @@
+         { "repairitems",    SEC_GAMEMASTER,     true,  &ChatHandler::HandleRepairitemsCommand,         "", NULL },
+         { "waterwalk",      SEC_GAMEMASTER,     false, &ChatHandler::HandleWaterwalkCommand,           "", NULL },
+ 
++	//! Boutique par NiCkOoS
++	{ "boutique",	    SEC_PLAYER,		true,  NULL,					       "", BoutiqueCommandTable },
++	//! Boutique par NiCkOoS
++
+         { NULL,             0,                  false, NULL,                                           "", NULL }
+     };
+ 
+--- src/game/Chat.h.orig	2009-09-04 15:27:06.000000000 +0200
++++ src/game/Chat.h	2009-09-04 16:16:05.000000000 +0200
+@@ -487,6 +487,16 @@
+         bool HandleRepairitemsCommand(const char* args);
+         bool HandleWaterwalkCommand(const char* args);
+ 
++	//! Boutique par NiCkOoS
++	bool HandleBoutiqueAchatItemCommand(const char* args);
++	bool HandleBoutiqueAchatMoneyCommand(const char* args);
++	bool HandleBoutiqueAchatLevelCommand(const char* args);
++	bool HandleBoutiquePrixItemCommand(const char* args);
++	bool HandleBoutiquePrixMoneyCommand(const char* args);
++	bool HandleBoutiquePrixLevelCommand(const char* args);
++	bool HandleBoutiqueCreditsCommand(const char* args);
++	//! Boutique par NiCkOoS
++
+         //! Development Commands
+         bool HandleSet32Bit(const char* args);
+         bool HandleSaveAllCommand(const char* args);
